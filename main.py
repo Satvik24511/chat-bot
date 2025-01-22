@@ -10,10 +10,23 @@ class SymptomMatcher:
         self.symptom_embeddings = self.embedding_model.encode(self.symptoms, convert_to_tensor=True)
 
     def normalize_text(self, text):
+
         text = text.lower()
         text = re.sub(r'[^a-z0-9\s]', '', text)
         text = re.sub(r'\s+', ' ', text).strip()
-        return text
+        return_text = ""
+
+        for char in text.split():
+            temp = self.embedding_model.encode(char,convert_to_tensor=True)
+            similarities = util.cos_sim(temp,self.symptom_embeddings)
+            for idx, score in enumerate(similarities[0]):
+                # print(char,self.symptoms[idx],score.item())
+                if score.item() > 0.5:
+                    return_text+=char + " "
+                    break
+        # print(return_text)
+        # print("The return text is above")
+        return return_text
 
     # uses cos function with vector mapping to compare words and scentences 
     def match_symptoms(self, input_text):
@@ -27,12 +40,15 @@ class SymptomMatcher:
         if not matched_symptoms:
             input_embedding = self.embedding_model.encode(normalized_input, convert_to_tensor=True)
             similarities = util.cos_sim(input_embedding, self.symptom_embeddings)
-            # 
+            # temp = []
             # print(similarities[0])
             for idx, score in enumerate(similarities[0]):
-                if score.item() > 0.5:
+                # temp.append((score.item(),self.symptoms[idx]))
+                if score.item() > 0.75: 
                     matched_symptoms.append(self.symptoms[idx])
-
+            # temp.sort()
+            # for a,b in temp:
+            #     print(a,b)
         return matched_symptoms
 
 class CardiologyChatbot:
@@ -49,7 +65,7 @@ class CardiologyChatbot:
     "Muscle weakness", "Loss of appetite", "Trouble sleeping",
     "Sleepiness during the day", "Hot flashes", "Feeling cold", "Bruising",
     "Difficulty concentrating", "Memory problems", "Tremors",
-    "Cold hands or feet", "Frequent headaches", "Sudden pain in one part of the body",
+    "Cold hands or feet", "Sudden pain in one part of the body",
     "Sensitivity to light", "Sensitivity to sound", "Hoarseness", "Thirst",
     "Dry skin", "Vomiting", "Abdominal pain", "Heartburn", "Gas or bloating",
     "Painful menstruation", "Irregular menstrual cycle", "Weakness",
