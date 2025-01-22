@@ -35,6 +35,7 @@ class SymptomMatcher:
 class CardiologyChatbot:
     def __init__(self):
         self.symptom_list = [
+            "stomach ache",
             "chest pain",
             "shortness of breath",
             "irregular heartbeat",
