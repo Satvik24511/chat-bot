@@ -65,7 +65,7 @@ class CardiologyChatbot:
     
     def __init__(self):
         self.symptom_list = [
-    "Shortness of breath", "Dizziness", "Nausea", "Headache", "Chest pain",
+    "Shortness of breath", "Dizziness", "Nausea", "Headache", "Chest pain", "blood pressure / bp",
     "Fatigue", "Swelling in the legs or feet", "Stomach cramps", "Back pain",
     "Sore throat", "Rash", "Itchy skin", "Blurry vision", "Ringing in the ears",
     "Sweating", "Chills", "Fainting", "Difficulty swallowing", "Weight loss",
