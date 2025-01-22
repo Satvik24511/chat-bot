@@ -40,16 +40,26 @@ class SymptomMatcher:
         if not matched_symptoms:
             input_embedding = self.embedding_model.encode(normalized_input, convert_to_tensor=True)
             similarities = util.cos_sim(input_embedding, self.symptom_embeddings)
-            # temp = []
+            temp = []
             # print(similarities[0])
+            flg = False
             for idx, score in enumerate(similarities[0]):
-                # temp.append((score.item(),self.symptoms[idx]))
-                if score.item() > 0.75: 
-                    matched_symptoms.append(self.symptoms[idx])
-            # temp.sort()
+                temp.append((score.item(),self.symptoms[idx]))
+                if score.item() > 0.70: 
+                    flg = True
+            temp.sort()
+            # for i in temp:
+            #     print(i[0],i[1])
+            a = ""
+            b = ""
+            if(flg):
+                matched_symptoms = [temp[-1][1]]
+                # print(temp[-2][1],temp[-3][1])
+                a = temp[-2][1]
+                b = temp[-3][1]
             # for a,b in temp:
             #     print(a,b)
-        return matched_symptoms
+        return matched_symptoms,a,b
 
 class CardiologyChatbot:
     
@@ -119,12 +129,16 @@ class CardiologyChatbot:
         self.current_symptom = None
         self.current_followup_index = 0
         self.collected_data = {}
+        self.a = ""
+        self.b = ""
+        self.detected_symptoms = []
+
 
     def ask_followup(self, symptom):
         followup_questions = [
             f"How often do you experience {symptom}? (Rarely, Occasionally, Frequently, All the time)",
             f"On a scale of 1-10, how severe is your {symptom}?",
-            f"When did the {symptom} start? (e.g., 2 days ago, 1 week ago)"
+            f"When did the {symptom} start? (e.g., 2 days ago, 1 week ago)"   
         ]
         return followup_questions
 
@@ -193,13 +207,17 @@ class CardiologyChatbot:
                     return f"I detected the symptom: {self.current_symptom}. {self.ask_followup(self.current_symptom)[self.current_followup_index]}"
                 else:
                     self.current_symptom = None
-                    return "Thank you for providing details about your symptoms. Can you describe any other symptoms you are experiencing?"
+                    return f"Thank you for providing details about your symptoms. Can you describe any other symptoms you are experiencing such as {self.a} or {self.b}?"
 
         if not self.current_symptom:
-            symptoms = self.matcher.match_symptoms(user_input)
+            symptoms,self.a,self.b= self.matcher.match_symptoms(user_input)
             if symptoms:
+                if(symptoms[0] in self.detected_symptoms):
+                    return "I've already detected this symptom. Please describe another symptom."
                 self.pending_symptoms.extend(symptoms)
                 self.current_symptom = self.pending_symptoms.pop(0)
+                #if(self.current_symptom in self.detected_symptoms):
+                self.detected_symptoms.append(symptoms[0])
                 self.collected_data[self.current_symptom] = []
                 self.current_followup_index = 0
                 return f"I detected the symptom: {self.current_symptom}. {self.ask_followup(self.current_symptom)[self.current_followup_index]}"
