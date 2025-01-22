@@ -27,7 +27,8 @@ class SymptomMatcher:
         if not matched_symptoms:
             input_embedding = self.embedding_model.encode(normalized_input, convert_to_tensor=True)
             similarities = util.cos_sim(input_embedding, self.symptom_embeddings)
-            print(similarities[0])
+            # 
+            # print(similarities[0])
             for idx, score in enumerate(similarities[0]):
                 if score.item() > 0.5:
                     matched_symptoms.append(self.symptoms[idx])
