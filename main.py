@@ -3,6 +3,7 @@ from rapidfuzz import process
 import re
 
 class SymptomMatcher:
+    '''Matches symptoms to a list of possible symptoms based on a given text input, Returns a list of all possible matches of symptoms'''
     def __init__(self, symptom_list):
         self.symptoms = symptom_list
 
@@ -26,11 +27,13 @@ class SymptomMatcher:
         if not matched_symptoms:
             input_embedding = self.embedding_model.encode(normalized_input, convert_to_tensor=True)
             similarities = util.cos_sim(input_embedding, self.symptom_embeddings)
+            print(similarities[0])
             for idx, score in enumerate(similarities[0]):
                 if score.item() > 0.5:
                     matched_symptoms.append(self.symptoms[idx])
 
         return matched_symptoms
+
 
 class CardiologyChatbot:
     def __init__(self):
@@ -52,27 +55,16 @@ class CardiologyChatbot:
         self.collected_data = {}
 
     def ask_followup(self, symptom):
-        followup_questions = {
-            "chest pain": [
-                "How often do you experience chest pain? (Rarely, Occasionally, Frequently, All the time)",
-                "On a scale of 1-10, how severe is your chest pain?",
-                "When did the chest pain start? (e.g., 2 days ago, 1 week ago)",
-                "Does the pain radiate to other areas like the arms, back, or jaw?"
-            ],
-            "shortness of breath": [
-                "How often do you experience shortness of breath?",
-                "On a scale of 1-10, how severe is your shortness of breath?",
-                "When did the shortness of breath start?",
-                "Is it triggered by physical activity or occurs even at rest?"
-            ],
-            "irregular heartbeat": [
-                "How often do you feel your heartbeat is irregular?",
-                "On a scale of 1-10, how severe is the irregular heartbeat?",
-                "When did the irregular heartbeat start?",
-                "Do you feel any accompanying symptoms like dizziness or chest discomfort?"
-            ]
-        }
-        return followup_questions.get(symptom, ["Can you tell me more about your symptoms?"])
+        # followup_questions = {
+        #     "chest pain": [
+        #         "How often do you experience chest pain? (Rarely, Occasionally, Frequently, All the time)",
+        #         "On a scale of 1-10, how severe is your chest pain?",
+        #         "When did the chest pain start? (e.g., 2 days ago, 1 week ago)"
+        #       #  "Does the pain radiate to other areas like the arms, back, or jaw?"
+        #     ]
+        # }
+        followup_questions = [f"How often do you experience + {symptom}? (Rarely, Occasionally, Frequently, All the time)", f"On a scale of 1-10, how severe is your {symptom}?",f"When did the {symptom} start? (e.g, 2days ago, 1 week ago)"] 
+        return followup_questions
 
     def handle_input(self, user_input):
         exit_commands = ["exit", "quit", "stop", "no", "thank you", "that's all", "done"]
