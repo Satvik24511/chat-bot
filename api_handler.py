@@ -6,7 +6,7 @@ class GeminiAPIHandler:
         self.model = genai.GenerativeModel('gemini-pro')
 
     def extract_symptoms(self, user_input):
-        prompt = f"Extract medical symptoms from the following text and return them as a comma-separated list: {user_input}"
+        prompt = f"Extract medical symptoms from the following text and return them as a comma-separated list: and if there are no symptoms respond with 'no' {user_input}"
         response = self.model.generate_content(prompt)
         return response.text.split(',')
 
@@ -24,3 +24,17 @@ class GeminiAPIHandler:
         prompt = f"Generate a detailed medical report in markdown format based on the following data: {collected_data}"
         response = self.model.generate_content(prompt)
         return response.text
+    
+    def is_exit_command(self, user_input: str) -> bool:
+        """
+        Uses Gemini to determine if the user's input is an exit command.
+        Returns True if the input is recognized as a command to exit; otherwise, False.
+        """
+        prompt = (
+            f"Determine if the following input from a user is meant to end the conversation. "
+            f"Answer with 'yes' if it is an exit command or 'no' otherwise.\n\nUser Input: {user_input}"
+        )
+        response = self.model.generate_content(prompt)
+        answer = response.text.strip().lower()
+        # For example, if Gemini returns "yes", then we treat it as an exit command.
+        return answer == "yes"

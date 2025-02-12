@@ -1,4 +1,5 @@
 import matcher as sm
+import vtt_handler as vtt
 hospital_name = "AIIMS"
 symptom_list = [
     "Shortness of breath", "Dizziness", "Nausea", "Headache", "Chest pain", "blood pressure / bp",
@@ -61,10 +62,22 @@ symptom_list = [
 ]
 Mode = 0
 
-def inp(a,m = Mode):
+def inp(a,m = -1):
+    global Mode
+    if(m == -1):
+        m = Mode
     print(a)
+    # print("m is",m)
     if(m == 0):
+        
+        # print("for some reason m is",m)
         return input()
+    else:
+        # print("TEST")
+        vtt.record_audio("user_audio.wav")
+        j = vtt.transcribe_audio("user_audio.wav")
+        print(j)
+        return j
     
     # voice module to be integrated here 
 
@@ -88,12 +101,12 @@ class Patients:
         rcd = {}
         return rcd
     def add_patient(self):
-        name = inp("Please input your full name:")
-        num = inp("Please input your phone number:(without the +91 extension and without any space)")
+        name = inp("Please input your full name:",0)
+        num = inp("Please input your phone number:(without the +91 extension and without any space)",0)
         while(len(num) != 10 or num.isnumeric() == False):
             if(num == "skip"):
                 break
-            num = inp("Please input a valid phone or input \"skip\" to skip for now")
+            num = inp("Please input a valid phone or input \"skip\" to skip for now",0)
         flg = False
         rcd = ""
         if(num != "skip"):
@@ -109,11 +122,11 @@ class Patients:
         gender = inp("Please input your gender (Male/Female):")
         gender = gender.lower()
         while(gender != "male" or gender != "female"):
-            gender = inp("Please give a valid input:")
+            gender = inp("Please give a valid input:"),0
             gender = gender.lower()
-        age = inp("please input your age:")
+        age = inp("please input your age:",0)
         while(age.isnumeric() == False):
-            age = inp("Please give a valid input:")
+            age = inp("Please give a valid input:",0)
         self.patient_list[self.id] = Patient(self.id,name,num,gender,age)
         self.id+=1
         self.no_patients+=1
@@ -143,7 +156,7 @@ Age: {self.age}'''
 
 def Gather_info(patients_db):
     yn = inp("Is this your first time in this hospital? (y/n)").strip().lower()
-    while yn not in ["y", "n", "yes", "no"]:
+    while len(yn) < 1 or yn[0] not in ["y", "n", "yes", "no"]:
         yn = inp("Please input a valid response (y/n):").strip().lower()
 
     if yn in ["y", "yes"]:
@@ -208,6 +221,7 @@ if __name__ == "__main__":
     a = input("Would you like voice or text? (v/t)")
     if(a == "v"):
         Mode = 1
+    # print(Mode)
     symp_mch = sm.SymptomMatcher(symptom_list)
     print(f"Hello! Welcome to {hospital_name}. I'm here to assist with your check-in. Can I start by gathering some details?")
     Gather_info(p)

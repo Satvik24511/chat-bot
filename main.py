@@ -1,79 +1,13 @@
-from sentence_transformers import SentenceTransformer, util
-from rapidfuzz import process
-import re
+import vtt_handler as vtt
+import api_handler as ga       # Ensure this module provides extract_symptoms() and is_exit_command()
+import matcher as sm
+from dic_to_pdf import generate_pdf_from_dict  # Function to convert dict to PDF
 
-class SymptomMatcher:
-    '''This is a class which has 1 function match_symptom, it uses the initialised symptoms when defining the class, and matches them (it can also match synonyms)'''
-    def __init__(self, symptom_list):
-        self.symptoms = symptom_list
-        self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-        self.symptom_embeddings = self.embedding_model.encode(self.symptoms, convert_to_tensor=True) #encode changes the sentence into a 384 dimensional vector
-        # print("These are the symptom_emmbeddingsa or wtv:", self.symptom_embeddings)
-        # print("This is the 2nd thing,",self.embedding_model.encode("Daksh", convert_to_tensor=True))
-    def normalize_text(self, text):
+hospital_name = "AIIMS"
+Mode = 0  # Global mode: 0 for text input, 1 for voice input
 
-        text = text.lower()
-        text = re.sub(r'[^a-z0-9\s]', '', text)
-        text = re.sub(r'\s+', ' ', text).strip()
-        return_text = ""
-
-        for char in text.split():
-            temp = self.embedding_model.encode(char,convert_to_tensor=True)
-            similarities = util.cos_sim(temp,self.symptom_embeddings)
-            for idx, score in enumerate(similarities[0]):
-                # print(char,self.symptoms[idx],score.item())
-                if score.item() > 0.5:
-                    return_text+=char + " "
-                    break
-        # print(return_text)
-        # print("The return text is above")
-        return [return_text]
-
-    # uses cos function with vector mapping to compare words and scentences 
-    def match_symptoms(self, input_text):
-        normalized_input = self.normalize_text(input_text) # normalized_input is a list here with potential phrases that can be symptoms
-        matched_symptoms = []
-
-        # for symptom in self.symptoms:
-        #     if symptom in normalized_input:
-        #         matched_symptoms.append(symptom) #this loop is for checking if the exact symptom is present in the symptoms list.
-        # print(matched_symptoms,normalized_input)
-        
-        
-        input_embedding = self.embedding_model.encode(normalized_input, convert_to_tensor=True)
-        similarities = util.cos_sim(input_embedding, self.symptom_embeddings)
-        temp = []
-        flg = False
-        for i in range(len(normalized_input)):
-            for idx, score in enumerate(similarities[i]):
-                temp.append((score.item(),self.symptoms[idx]))
-                if score.item() > 0.70: 
-                    if self.symptoms[idx] not in matched_symptoms:
-                        matched_symptoms.append(self.symptoms[idx])
-                    flg = True
-                    break
-        temp.sort(reverse=True)
-        a = ""
-        b = ""
-        flg2 = False
-        if flg:
-            for i in range(len(temp)):
-                if(temp[i] not in matched_symptoms and flg2 == False):
-                    a = temp[i]
-                    flg2 = True
-                if(temp[i] not in matched_symptoms and flg2 == True):
-                    b = temp[i]
-                    break
-        if b == "":
-            b = temp[0]
-        if a == "":
-            a = temp[1]
-        return matched_symptoms,a,b
-
-class CardiologyChatbot:
-    
-    def __init__(self):
-        self.symptom_list = [
+# Define your known symptom list.
+symptom_list = [
     "Shortness of breath", "Dizziness", "Nausea", "Headache", "Chest pain", "blood pressure / bp",
     "Fatigue", "Swelling in the legs or feet", "Stomach cramps", "Back pain",
     "Sore throat", "Rash", "Itchy skin", "Blurry vision", "Ringing in the ears",
@@ -133,114 +67,282 @@ class CardiologyChatbot:
     "Restlessness in legs (general)"
 ]
 
-        self.matcher = SymptomMatcher(self.symptom_list)
-        self.pending_symptoms = []
-        self.current_symptom = None
-        self.current_followup_index = 0
-        self.collected_data = {}
-        self.a = ""
-        self.b = ""
-        self.detected_symptoms = []
+def inp(prompt, m=-1):
+    """
+    Get user input using text or voice depending on Mode.
+    """
+    global Mode
+    if m == -1:
+        m = Mode
+    print(prompt)
+    if m == 0:
+        return input()
+    else:
+        vtt.record_audio("user_audio.wav")
+        j = vtt.transcribe_audio("user_audio.wav")
+        print("You said:", j)
+        return j
 
-
-    def ask_followup(self, symptom):
-        followup_questions = [
-            f"How often do you experience {symptom}? (Rarely, Occasionally, Frequently, All the time)",
-            f"On a scale of 1-10, how severe is your {symptom}?",
-            f"When did the {symptom} start? (e.g., 2 days ago, 1 week ago)"   
-        ]
-        return followup_questions
-
-    def validate_followup_response(self, question_type, user_input):
-        if question_type == "frequency":
-            valid_responses = ["rarely", "occasionally", "frequently", "all the time"]
-            if user_input.lower() in valid_responses:
-                return True, user_input.capitalize()
+def get_validated_followup(question, validation_type):
+    """
+    Repeatedly asks the question until a valid response is provided.
+    For "frequency", valid responses are: Rarely, Occasionally, Frequently, All the time.
+    For "severity", valid responses are integers between 1 and 10.
+    """
+    while True:
+        response = inp(question, 0).strip()
+        if validation_type == "frequency":
+            valid = ["rarely", "occasionally", "frequently", "all the time"]
+            if response.lower() in valid:
+                return response.capitalize()
             else:
-                return False, "Please provide one of the following responses: Rarely, Occasionally, Frequently, All the time."
-        elif question_type == "severity":
+                print("Please provide one of the following responses: Rarely, Occasionally, Frequently, All the time.")
+        elif validation_type == "severity":
             try:
-                severity = int(user_input)
+                severity = int(response)
                 if 1 <= severity <= 10:
-                    return True, severity
+                    return severity
                 else:
-                    return False, "Please provide a number between 1 and 10 for severity."
+                    print("Please provide a number between 1 and 10.")
             except ValueError:
-                return False, "Please provide a valid number between 1 and 10 for severity."
-        return True, user_input
+                print("Please provide a valid number between 1 and 10.")
+        else:
+            return response
 
-    def handle_input(self, user_input):
-        exit_commands = exit_commands = [
-    "exit", "quit", "stop", "end", "close", "bye", "goodbye", 
-    "thank you", "thanks", "that's all", "that's it", "done", 
-    "no, thank you", "nothing else", "I'm done", "all set", 
-    "no", "nope", "nah", "not really", "not now", "leave me alone", 
-    "thx", "bye bye", "cya", "see ya", "gtg", "im done", 
-    "nothin else", "nope im good", "I have no more symptoms", 
-    "I don't need help anymore", "Nothing more to add", 
-    "I'm fine now", "That's all I needed", "leave", "go away", 
-    "stop talking", "I don't want to talk anymore", "stop bothering me", 
-    "ttyl", "brb", "afaik"
-]
-
-        if user_input.lower() in exit_commands:
-            if self.collected_data:
-                summary = "\nSummary of Collected Data:\n" + "\n".join(
-                    [f"- {symptom.capitalize()}: {', '.join(map(str, details))}" for symptom, details in self.collected_data.items()]
-                )
-                return f"Thank you for using the Cardiology Assistant Chatbot. Take care!\n\n------------------------------------------------------------------------\n{summary}\n\n"
-            return "Thank you for using the Cardiology Assistant Chatbot. Take care!"
-
-        if self.current_symptom and self.current_followup_index < len(self.ask_followup(self.current_symptom)):
-            current_question = self.ask_followup(self.current_symptom)[self.current_followup_index]
-            if "How often do you experience" in current_question:
-                is_valid, response = self.validate_followup_response("frequency", user_input)
-            elif "On a scale of 1-10, how severe is" in current_question:
-                is_valid, response = self.validate_followup_response("severity", user_input)
+def generate_markdown_report(data: dict) -> str:
+    """
+    Generates a markdown formatted report from the collected data.
+    This summary is strictly a record of the provided information.
+    """
+    report_lines = []
+    report_lines.append("# Patient Summary Report")
+    report_lines.append("")
+    report_lines.append("## Patient Details")
+    report_lines.append(f"- **Patient ID:** {data.get('Patient ID', '')}")
+    report_lines.append(f"- **Name:** {data.get('Name', '')}")
+    report_lines.append(f"- **Age:** {data.get('Age', '')}")
+    report_lines.append(f"- **Gender:** {data.get('Gender', '')}")
+    report_lines.append(f"- **Phone:** {data.get('Phone', '')}")
+    report_lines.append("")
+    report_lines.append("## Medical History")
+    med_history = data.get("Medical History", {})
+    for key, value in med_history.items():
+        if isinstance(value, dict):
+            response = value.get("response", "")
+            details = value.get("details", "")
+            line = f"- **{key}:** {response.capitalize()}"
+            if details:
+                line += f" (Details: {details})"
+            report_lines.append(line)
+        else:
+            report_lines.append(f"- **{key}:** {value}")
+    report_lines.append("")
+    report_lines.append("## Symptoms")
+    symptoms = data.get("Symptoms", {})
+    if not symptoms:
+        report_lines.append("No symptoms reported.")
+    else:
+        for symptom, details in symptoms.items():
+            report_lines.append(f"- **{symptom.capitalize()}:**")
+            if details and len(details) >= 3:
+                frequency = details[0]
+                severity = details[1]
+                onset = details[2]
+                report_lines.append(f"    - **Frequency:** {frequency}")
+                report_lines.append(f"    - **Severity:** {severity}")
+                report_lines.append(f"    - **Onset:** {onset}")
             else:
-                is_valid, response = True, user_input
+                report_lines.append("    - No details provided.")
+    return "\n".join(report_lines)
 
-            if not is_valid:
-                return response
+class Patients:
+    def __init__(self):
+        self.id = 1
+        self.no_patients = 0
+        self.patient_list = {}
+    
+    def find_record(self, phone_no, name=""):
+        rt = []
+        for pid, patient in self.patient_list.items():
+            if patient.phone_no == phone_no:
+                rt.append(pid)
+        if rt:
+            return True, rt
+        return False, []
+    
+    def record_by_id(self, id):
+        return self.patient_list.get(id, None)
+    
+    def add_patient(self):
+        name = inp("Please input your full name:", 0)
+        num = inp("Please input your phone number (without the +91 extension and spaces):", 0)
+        while len(num) != 10 or not num.isnumeric():
+            if num.strip().lower() == "skip":
+                break
+            num = inp("Please input a valid phone number or type \"skip\" to skip:", 0)
+        found, rec_ids = (False, [])
+        if num.strip().lower() != "skip":
+            found, rec_ids = self.find_record(num, name)
+        if found:
+            pid = rec_ids[0]
+            rec_str = self.patient_list[pid].rt_str()
+            yn = inp(f"This record was found associated with your phone number. Is this you? (y/n)\n{rec_str}", 0).strip().lower()
+            while yn not in ["y", "n", "yes", "no"]:
+                yn = inp("Please input a valid response (y/n):", 0).strip().lower()
+            if yn in ["y", "yes"]:
+                return 1, pid
+        gender = inp("Please input your gender (Male/Female):", 0).strip().lower()
+        while gender not in ["male", "female"]:
+            gender = inp("Please provide a valid input (Male/Female):", 0).strip().lower()
+        age = inp("Please input your age:", 0).strip()
+        while not age.isnumeric():
+            age = inp("Please provide a valid numeric age:", 0).strip()
+        patient = Patient(self.id, name, num, gender, age)
+        self.patient_list[self.id] = patient
+        self.id += 1
+        self.no_patients += 1
+        return 0, self.id - 1
 
-            self.collected_data[self.current_symptom].append(response)
-            self.current_followup_index += 1
+class Patient:
+    def __init__(self, pid, name, phone_no, gender, age):
+        self.id = pid
+        self.name = name
+        self.phone_no = phone_no
+        self.gender = gender 
+        self.age = age
+        self.history = {}   # To store all patient data
+        self.history["symptoms"] = {}  # Mapping each symptom to its follow-up responses
+    
+    def reset_symptoms(self):
+        self.history["symptoms"] = {}
+    
+    def rt_str(self):
+        return f'''ID: {self.id}
+Name: {self.name}
+Phone no: {self.phone_no}
+Gender: {self.gender}
+Age: {self.age}'''
 
-            if self.current_followup_index < len(self.ask_followup(self.current_symptom)):
-                return self.ask_followup(self.current_symptom)[self.current_followup_index]
-            else:
-                self.current_followup_index = 0
-                if self.pending_symptoms:
-                    self.current_symptom = self.pending_symptoms.pop(0)
-                    self.collected_data[self.current_symptom] = []
-                    return f"I detected the symptom: {self.current_symptom}. {self.ask_followup(self.current_symptom)[self.current_followup_index]}"
-                else:
-                    self.current_symptom = None
-                    return f"Thank you for providing details about your symptoms. Can you describe any other symptoms you are experiencing such as {self.a} or {self.b}?"
-
-        if not self.current_symptom:
-            symptoms,self.a,self.b= self.matcher.match_symptoms(user_input)
-            if symptoms:
-                if(symptoms[0] in self.detected_symptoms):
-                    return "I've already detected this symptom. Please describe another symptom."
-                self.pending_symptoms.extend(symptoms)
-                self.current_symptom = self.pending_symptoms.pop(0)
-                #if(self.current_symptom in self.detected_symptoms):
-                self.detected_symptoms.append(symptoms[0])
-                self.collected_data[self.current_symptom] = []
-                self.current_followup_index = 0
-                return f"I detected the symptom: {self.current_symptom}. {self.ask_followup(self.current_symptom)[self.current_followup_index]}"
-            else:
-                return "I'm sorry, I couldn't identify any symptoms in your input. Can you describe your symptoms in more detail?"
+def Gather_info(patients_db):
+    # Instantiate the symptom matcher using your known symptom list.
+    symptom_matcher = sm.SymptomMatcher(symptom_list)
+    
+    # Basic patient check.
+    yn = inp("Is this your first time in this hospital? (y/n):", 0).strip().lower()
+    while len(yn) < 1 or yn[0] not in ["y", "n", "yes", "no"]:
+        yn = inp("Please input a valid response (y/n):", 0).strip().lower()
+    
+    if yn in ["y", "yes"]:
+        new_patient, patient_id = patients_db.add_patient()
+    else:
+        phone_no = inp("Please enter your registered phone number (without +91 and spaces):", 0)
+        found, patient_ids = patients_db.find_record(phone_no)
+        if found:
+            print(f"Found records associated with this number: {patient_ids}.")
+            patient_id = patient_ids[0]
+            print(f"Medical record pulled for Patient ID: {patient_id}")
+        else:
+            print("No record found. Please register as a new patient.")
+            new_patient, patient_id = patients_db.add_patient()
+    
+    if patient_id not in patients_db.patient_list:
+        print("Error: Patient record not found.")
+        return 0
+    
+    patient = patients_db.patient_list[patient_id]
+    
+    # Ask about major surgeries and, if yes, request further details.
+    major_surgery = inp("Have you undergone any major surgeries? (yes/no):", 0).strip().lower()
+    if major_surgery in ["yes", "y"]:
+        surgery_details = inp("Please provide details of your major surgeries (e.g., type, year, outcome):", 0)
+        patient.history["major_surgery"] = {"response": major_surgery, "details": surgery_details}
+    else:
+        patient.history["major_surgery"] = {"response": major_surgery, "details": ""}
+    
+    patient.history["family_history"] = inp("Do your parents or grandparents suffer from similar symptoms? (yes/no):", 0).strip().lower()
+    patient.history["allergies"] = inp("Do you have any known allergies? If yes, please specify. If no, type 'no':", 0).strip()
+    patient.history["smoker"] = inp("Are you a smoker? (yes/no):", 0).strip().lower()
+    patient.history["sexual_history"] = inp("Would you like to disclose any relevant sexual health information? (yes/no):", 0).strip().lower()
+    
+    # Initialize Gemini API handler (replace with your actual key)
+    gemini = ga.GeminiAPIHandler("AIzaSyBkRDmEdtVhVtHHbfvpetHKANTz1EW1qYQ")
+    
+    print("\nNow, please describe your symptoms in plain English.")
+    print("For example: 'I feel pain in my head and I'm tired all the time.'")
+    print("When you are done, please provide your exit command.")
+    
+    # Allow multiple rounds of symptom input.
+    matched_symptoms = []
+    while True:
+        if len(matched_symptoms) == 0:
+            user_input = inp("Describe your symptoms:", 0)
+            if gemini.is_exit_command(user_input):
+                print("Exit command recognized. Ending symptom input.")
+                break
+            
+            extracted_symptoms = gemini.extract_symptoms(user_input)
+            # Clean up the list: strip whitespace and lowercase.
+            extracted_symptoms = [sym.strip().lower() for sym in extracted_symptoms if sym.strip()]
+            
+            # Check if Gemini returned "no" (i.e. no symptoms found)
+            if len(extracted_symptoms) == 1 and extracted_symptoms[0] == "no":
+                print("No symptoms identified in your input. Please describe your symptoms in more detail.")
+                continue
+            
+            # Use the matcher to normalize the extracted symptoms.
+            matched_symptoms, a, b = symptom_matcher.match_symptoms(extracted_symptoms)
+            if not matched_symptoms:
+                print("None of the extracted symptoms matched our known symptoms. Please describe your symptoms in more detail.")
+                continue
+            
+        # Use the first matched symptom.
+        normalized_symptom = matched_symptoms[0]
+        # print("matched symptoms are following:",matched_symptoms)
+        matched_symptoms.pop(0)
+        if normalized_symptom in patient.history["symptoms"]:
+            print(f"The symptom '{normalized_symptom}' has already been recorded. Skipping follow-up for this symptom.")
+            continue
+        
+        # Record the normalized symptom and ask follow-up questions with validated input.
+        patient.history["symptoms"][normalized_symptom] = []
+        freq_question = f"How often do you experience {normalized_symptom}? (Rarely, Occasionally, Frequently, All the time)"
+        sev_question = f"On a scale of 1-10, how severe is your {normalized_symptom}?"
+        start_question = f"When did the {normalized_symptom} start? (e.g., 2 days ago, 1 week ago)"
+        
+        frequency = get_validated_followup(freq_question, "frequency")
+        severity = get_validated_followup(sev_question, "severity")
+        start_time = inp(start_question, 0)
+        
+        patient.history["symptoms"][normalized_symptom].extend([frequency, severity, start_time])
+    
+    # Compile all collected data into a summary dictionary.
+    collected_data = {
+        "Patient ID": patient.id,
+        "Name": patient.name,
+        "Age": patient.age,
+        "Gender": patient.gender,
+        "Phone": patient.phone_no,
+        "Medical History": {
+            "Major Surgery": patient.history.get("major_surgery", {}),
+            "Family History": patient.history.get("family_history", ""),
+            "Allergies": patient.history.get("allergies", ""),
+            "Smoker": patient.history.get("smoker", ""),
+            "Sexual History": patient.history.get("sexual_history", "")
+        },
+        "Symptoms": patient.history["symptoms"]
+    }
+    
+    # Convert the collected data into a PDF.
+    generate_pdf_from_dict(collected_data, "Patient_Summary_Report.pdf")
+    print("\nSummary report has been saved as 'Patient_Summary_Report.pdf'.")
+    return 1
 
 if __name__ == "__main__":
-    chatbot = CardiologyChatbot()
-
-    print("Welcome to the Cardiology Assistant Chatbot. Please describe your symptoms.")
-
-    while True:
-        user_input = input("You: ")
-        response = chatbot.handle_input(user_input)
-        print(f"Chatbot: {response}")
-        if "Thank you for using the Cardiology Assistant Chatbot" in response:
-            break
+    p = Patients()
+    a = inp("Would you like voice or text input? (v/t):", 0)
+    if a.strip().lower() == "v":
+        Mode = 1
+    else:
+        Mode = 0
+    print(f"Hello! Welcome to {hospital_name}. I'm here to assist with your check-in. Let's start by gathering some details.")
+    Gather_info(p)
