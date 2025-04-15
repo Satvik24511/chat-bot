@@ -3,7 +3,7 @@ import google.generativeai as genai
 class GeminiAPIHandler:
     def __init__(self, api_key):
         genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel('gemini-pro')
+        self.model = genai.GenerativeModel('gemini-1.5-flash')
 
     def extract_symptoms(self, user_input):
         prompt = f"Extract medical symptoms from the following text and return them as a comma-separated list: and if there are no symptoms respond with 'no' {user_input}"
@@ -38,3 +38,10 @@ class GeminiAPIHandler:
         answer = response.text.strip().lower()
         # For example, if Gemini returns "yes", then we treat it as an exit command.
         return answer == "yes"
+
+
+if __name__ == "__main__":
+    genai.configure(api_key = "AIzaSyBkRDmEdtVhVtHHbfvpetHKANTz1EW1qYQ")
+    model_list = genai.list_models()
+    for model in model_list:    
+        print(model.name)

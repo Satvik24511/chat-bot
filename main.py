@@ -2,6 +2,10 @@ import vtt_handler as vtt
 import api_handler as ga       # Ensure this module provides extract_symptoms() and is_exit_command()
 import matcher as sm
 from dic_to_pdf import generate_pdf_from_dict  # Function to convert dict to PDF
+import adminhandler as ah
+import doctorhandler 
+from bson import ObjectId
+import datetime
 
 hospital_name = "AIIMS"
 Mode = 0  # Global mode: 0 for text input, 1 for voice input
@@ -158,21 +162,35 @@ def generate_markdown_report(data: dict) -> str:
 class Patients:
     def __init__(self):
         self.id = 1
-        self.no_patients = 0
-        self.patient_list = {}
+        try: 
+            self.db =  ah.encrypted_client[ah.encrypted_database_name]
+            self.patients_collection = self.db[ah.encrypted_collection_name]
+        except Exception as e:
+            print(f"Database connection error: {e}")
+            return
     
-    def find_record(self, phone_no, name=""):
-        rt = []
-        for pid, patient in self.patient_list.items():
-            if patient.phone_no == phone_no:
-                rt.append(pid)
-        if rt:
-            return True, rt
+    def find_record(self, Phone, name=""):
+        patients = list(self.patients_collection.find({"Phone": Phone}))
+        if patients:
+            patient_ids = [str(patient["_id"]) for patient in patients]
+            return True, patient_ids
         return False, []
     
     def record_by_id(self, id):
-        return self.patient_list.get(id, None)
     
+        """
+        Finds a patient by ID and returns a Patient object.
+        If the ID is not a valid ObjectId format, returns None.
+        Get patient record by ID from MongoDB
+        """
+        
+        # Convert string ID to ObjectId if needed
+        obj_id = ObjectId(id) if not isinstance(id, ObjectId) else id
+        patient_data = self.patients_collection.find_one({"_id": obj_id})
+        if patient_data:
+            return Patient.from_dict(patient_data)
+        return None
+   
     def add_patient(self):
         name = inp("Please input your full name:", 0)
         num = inp("Please input your phone number (without the +91 extension and spaces):", 0)
@@ -185,7 +203,11 @@ class Patients:
             found, rec_ids = self.find_record(num, name)
         if found:
             pid = rec_ids[0]
-            rec_str = self.patient_list[pid].rt_str()
+            patient = self.record_by_id(pid)
+            if patient is None:
+                print("Error: Failed to fetch the record by id")
+                return 0, None
+            rec_str = patient.rt_str()
             yn = inp(f"This record was found associated with your phone number. Is this you? (y/n)\n{rec_str}", 0).strip().lower()
             while yn not in ["y", "n", "yes", "no"]:
                 yn = inp("Please input a valid response (y/n):", 0).strip().lower()
@@ -197,21 +219,82 @@ class Patients:
         age = inp("Please input your age:", 0).strip()
         while not age.isnumeric():
             age = inp("Please provide a valid numeric age:", 0).strip()
-        patient = Patient(self.id, name, num, gender, age)
-        self.patient_list[self.id] = patient
-        self.id += 1
-        self.no_patients += 1
-        return 0, self.id - 1
+        password = inp("Please input your new password:", 0).strip()
+        confirm_password = inp("Please confirm your new password:", 0).strip()
+        
+        while password != confirm_password:
+            password = inp("Please input your new password:", 0).strip()
+            confirm_password = inp("Please confirm your new password:", 0).strip()
+
+
+        patient_data = {
+            "name": name,
+            "Phone": num,
+            "gender": gender,
+            "age": age,
+            "password" : password,
+            "history": {
+                "symptoms": {}
+            }
+        }
+        result = self.patients_collection.insert_one(patient_data)
+        pid = str(result.inserted_id)
+        return 0, pid
 
 class Patient:
-    def __init__(self, pid, name, phone_no, gender, age):
+    def __init__(self, pid, name, Phone, gender, age, password):
         self.id = pid
         self.name = name
-        self.phone_no = phone_no
+        self.Phone = Phone
         self.gender = gender 
         self.age = age
+        self.password = password
         self.history = {}   # To store all patient data
         self.history["symptoms"] = {}  # Mapping each symptom to its follow-up responses
+    @classmethod
+    def from_dict(cls, data):
+        """
+        Creates a Patient object from a dictionary.
+        """
+        pid = str(data["_id"])
+        name = data["name"]
+        Phone = data["Phone"]
+        gender = data["gender"]
+        age = data["age"]
+        password = data["password"]
+        patient = cls(pid, name, Phone, gender, age, password)
+        patient.history = data["history"]
+        return patient
+
+    def to_dict(self):
+        """
+        Converts the Patient object to a dictionary.
+        """
+        return {
+           "_id": self.id,
+           "name": self.name,
+           "Phone": self.Phone,
+           "gender": self.gender,
+           "age": self.age,
+           "password" : self.password,
+           "history": self.history
+        }
+    def save(self,db):
+        """
+        Saves the Patient object to the database.
+        """
+        newvalues = self.to_dict()
+        newvalues.pop("_id")
+        try:
+            obj_id = ObjectId(self.id)
+            db.patients_collection.update_one(
+                {"_id": obj_id},
+                {"$set": newvalues}
+            )
+            return True
+        except Exception as e:
+            print(f"Error: {e}")
+            return False
     
     def reset_symptoms(self):
         self.history["symptoms"] = {}
@@ -219,39 +302,71 @@ class Patient:
     def rt_str(self):
         return f'''ID: {self.id}
 Name: {self.name}
-Phone no: {self.phone_no}
+Phone no: {self.Phone}
 Gender: {self.gender}
 Age: {self.age}'''
 
-def Gather_info(patients_db):
-    # Instantiate the symptom matcher using your known symptom list.
-    symptom_matcher = sm.SymptomMatcher(symptom_list)
-    
-    # Basic patient check.
+
+#login/register function that opens the program 
+def main1(patients_db):
+    doctororpatient = inp("Are you a doctor or a patient? (d/p):", 0).strip().lower()
+    while len(doctororpatient) < 1 or doctororpatient[0] not in ["d", "p", "doctor", "patient"]:
+        doctororpatient = inp("Please input a valid response (d/p):", 0).strip().lower()
+
+    #login logic for doctors
+    if doctororpatient in ["d", "doctor"]:
+        printallrecords = inp("Do you want to print all records? (y/n):", 0).strip().lower()
+        while len(printallrecords) < 1 or printallrecords[0] not in ["y", "n", "yes", "no"]:
+            printallrecords = inp("Please input a valid response (y/n):", 0).strip().lower()
+        if printallrecords in ["y", "yes"]:
+            doctorhandler.print_patient_records()
+            return 0
+        else:
+            print("thank you for using our service")
+            return 0 
+
+
+    #login logic for patients
     yn = inp("Is this your first time in this hospital? (y/n):", 0).strip().lower()
     while len(yn) < 1 or yn[0] not in ["y", "n", "yes", "no"]:
         yn = inp("Please input a valid response (y/n):", 0).strip().lower()
     
     if yn in ["y", "yes"]:
         new_patient, patient_id = patients_db.add_patient()
+        patient = patients_db.record_by_id(patient_id)
     else:
         phone_no = inp("Please enter your registered phone number (without +91 and spaces):", 0)
+        password = inp("Please enter your password:", 0)
         found, patient_ids = patients_db.find_record(phone_no)
+        
         if found:
-            print(f"Found records associated with this number: {patient_ids}.")
             patient_id = patient_ids[0]
-            print(f"Medical record pulled for Patient ID: {patient_id}")
+            patient = patients_db.record_by_id(patient_id)
+            while(patient.password != password):
+                print("Incorrect password.")
+                forgot_password = inp("Forgot your password? (y/n):", 0).strip().lower()
+                if forgot_password in ["y", "yes"]:
+                    print("Please contact your doctor for password reset.")
+                    return None
+                elif forgot_password in ["n", "no"]:
+                    password = inp("Please enter your password:", 0)
+                else:
+                    print("Please enter a valid response.")
+
+            if patient.password == password:
+                print(f"Medical record pulled for Patient ID: {patient_id}")
+                return patient 
         else:
             print("No record found. Please register as a new patient.")
             new_patient, patient_id = patients_db.add_patient()
+
+def Gather_info(patients_db, patient):
+    # Instantiate the symptom matcher using your known symptom list.
+    if(patient is None):
+        return
+    symptom_matcher = sm.SymptomMatcher(symptom_list)
     
-    if patient_id not in patients_db.patient_list:
-        print("Error: Patient record not found.")
-        return 0
-    
-    patient = patients_db.patient_list[patient_id]
-    
-    # Ask about major surgeries and, if yes, request further details.
+        # Ask about major surgeries and, if yes, request further details.
     major_surgery = inp("Have you undergone any major surgeries? (yes/no):", 0).strip().lower()
     if major_surgery in ["yes", "y"]:
         surgery_details = inp("Please provide details of your major surgeries (e.g., type, year, outcome):", 0)
@@ -312,8 +427,13 @@ def Gather_info(patients_db):
         frequency = get_validated_followup(freq_question, "frequency")
         severity = get_validated_followup(sev_question, "severity")
         start_time = inp(start_question, 0)
+        date = datetime.datetime.now().strftime("%d/%m/%Y")
+        patient.history["symptoms"][normalized_symptom].extend([frequency, severity, start_time, date])
         
-        patient.history["symptoms"][normalized_symptom].extend([frequency, severity, start_time])
+        
+    patient.save(patients_db)
+
+
     
     # Compile all collected data into a summary dictionary.
     collected_data = {
@@ -321,7 +441,7 @@ def Gather_info(patients_db):
         "Name": patient.name,
         "Age": patient.age,
         "Gender": patient.gender,
-        "Phone": patient.phone_no,
+        "Phone": patient.Phone,
         "Medical History": {
             "Major Surgery": patient.history.get("major_surgery", {}),
             "Family History": patient.history.get("family_history", ""),
@@ -345,4 +465,9 @@ if __name__ == "__main__":
     else:
         Mode = 0
     print(f"Hello! Welcome to {hospital_name}. I'm here to assist with your check-in. Let's start by gathering some details.")
-    Gather_info(p)
+    try: 
+        patient = main1(p)
+        Gather_info(p, patient)
+    finally:
+        if hasattr(ah, "encrypted_client"):
+            ah.encrypted_client.close()
