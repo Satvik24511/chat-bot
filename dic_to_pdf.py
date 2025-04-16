@@ -1,108 +1,65 @@
 from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.enums import TA_LEFT, TA_CENTER 
+import os 
+
+SECTION_KEYS_EN = {
+    "details": "Patient Details",
+    "history": "Medical History",
+    "symptoms": "Symptoms Reported (Current Session & History)"
+}
+
 def generate_pdf_from_dict(data, filename):
     """
-    Generate a PDF from the collected data dictionary.
-    Translates the content to the user's preferred language before generating the PDF.
-    """
-    from reportlab.lib.pagesizes import letter
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-    from reportlab.lib.styles import getSampleStyleSheet
-    
-    # Create the PDF document
-    doc = SimpleDocTemplate(filename, pagesize=letter)
-    styles = getSampleStyleSheet()
-    story = []
-    
-    # Translate the title
-    title_text = translator.translate_to_user("Patient Summary Report")
-    title = Paragraph(title_text, styles["Title"])
-    story.append(title)
-    story.append(Spacer(1, 12))
-    
-    # Translate and add patient details
-    subtitle_text = translator.translate_to_user("Patient Details")
-    subtitle = Paragraph(subtitle_text, styles["Heading1"])
-    story.append(subtitle)
-    story.append(Spacer(1, 6))
-    
-    # Add patient information (translated)
-    patient_info = [
-        f"{translator.translate_to_user('Patient ID')}: {data.get('Patient ID', '')}",
-        f"{translator.translate_to_user('Name')}: {data.get('Name', '')}",
-        f"{translator.translate_to_user('Age')}: {data.get('Age', '')}",
-        f"{translator.translate_to_user('Gender')}: {translator.translate_to_user(data.get('Gender', ''))}",
-        f"{translator.translate_to_user('Phone')}: {data.get('Phone', '')}"
-    ]
-    
-    for info in patient_info:
-        p = Paragraph(info, styles["Normal"])
-        story.append(p)
-        story.append(Spacer(1, 6))
-    
-    story.append(Spacer(1, 12))
-    
-    # Translate and add medical history
-    subtitle_text = translator.translate_to_user("Medical History")
-    subtitle = Paragraph(subtitle_text, styles["Heading1"])
-    story.append(subtitle)
-    story.append(Spacer(1, 6))
-    
-    # Add medical history (translated)
-    med_history = data.get("Medical History", {})
-    for key, value in med_history.items():
-        translated_key = translator.translate_to_user(key)
-        if isinstance(value, dict):
-            response = translator.translate_to_user(value.get("response", ""))
-            details = translator.translate_to_user(value.get("details", ""))
-            text = f"<b>{translated_key}:</b> {response}"
-            if details:
-                text += f" ({translator.translate_to_user('Details')}: {details})"
-        else:
-            text = f"<b>{translated_key}:</b> {translator.translate_to_user(value)}"
-        
-        p = Paragraph(text, styles["Normal"])
-        story.append(p)
-        story.append(Spacer(1, 6))
-    
-    story.append(Spacer(1, 12))
-    
-    # Translate and add symptoms
-    subtitle_text = translator.translate_to_user("Symptoms")
-    subtitle = Paragraph(subtitle_text, styles["Heading1"])
-    story.append(subtitle)
-    story.append(Spacer(1, 6))
-    
-    # Add symptoms (translated)
-    symptoms = data.get("Symptoms", {})
-    if not symptoms:
-        p = Paragraph(translator.translate_to_user("No symptoms reported."), styles["Normal"])
-        story.append(p)
-    else:
-        for symptom, details in symptoms.items():
-            translated_symptom = translator.translate_to_user(symptom)
-            p = Paragraph(f"<b>{translated_symptom}</b>", styles["Heading2"])
-            story.append(p)
-            
-            if details and len(details) >= 3:
-                frequency = translator.translate_to_user(details[0])
-                severity = details[1]  # No need to translate numbers
-                onset = translator.translate_to_user(details[2])
-                
-                freq_text = f"<b>{translator.translate_to_user('Frequency')}:</b> {frequency}"
-                sev_text = f"<b>{translator.translate_to_user('Severity')}:</b> {severity}"
-                onset_text = f"<b>{translator.translate_to_user('Onset')}:</b> {onset}"
-                
-                story.append(Paragraph(freq_text, styles["Normal"]))
-                story.append(Paragraph(sev_text, styles["Normal"]))
-                story.append(Paragraph(onset_text, styles["Normal"]))
-            else:
-                p = Paragraph(translator.translate_to_user("No details provided."), styles["Normal"])
-                story.append(p)
-            
-            story.append(Spacer(1, 6))
-    
-    # Build the PDF
-    doc.build(story)
-    print(translator.translate_to_user(f"Report generated successfully: {filename}"))
+    Generates a PDF document from a dictionary containing pre-translated data.
 
+    Args:
+        data (dict): A dictionary where keys (section titles, labels) and relevant
+                     string values are already translated into the target language.
+                     The structure should correspond to how 'pdf_ready_data' is
+                     built in the main script.
+        filename (str): The desired output filename for the PDF.
+    """
+    try:
+        doc = SimpleDocTemplate(filename, pagesize=letter)
+        styles = getSampleStyleSheet()
+        story = []
+
+        for section_title, section_content in data.items():
+
+            story.append(Paragraph(str(section_title), styles['h1']))
+            story.append(Spacer(1, 6))
+
+            if not isinstance(section_content, dict):
+                story.append(Paragraph(str(section_content), styles['Normal']))
+                story.append(Spacer(1, 12))
+                continue 
+
+            for key, value in section_content.items():
+                is_symptoms_section = "Symptom" in section_title 
+                if is_symptoms_section and key != translate_label("Status"): 
+                    story.append(Paragraph(f"<b>{key}</b>", styles['h2'])) 
+                    story.append(Paragraph(str(value), styles['Normal'])) 
+                else:
+                    story.append(Paragraph(f"<b>{key}:</b> {value}", styles['Normal'])) 
+
+                story.append(Spacer(1, 4)) 
+
+            story.append(Spacer(1, 12)) 
+
+        doc.build(story)
+        print(f"PDF generated successfully: {filename}")
+        return True 
+
+    except ImportError:
+         print("Error: ReportLab library not found. Cannot generate PDF.")
+         print("Please install it: pip install reportlab")
+         return False
+    except Exception as e:
+        print(f"Error occurred during PDF generation for {filename}: {e}")
+        return False
+
+def translate_label(label_en):
+     """Placeholder - Requires importing translator module"""
+     pass
