@@ -6,7 +6,6 @@ class TranslationHandler:
     def __init__(self):
         self.user_language = "en"  # Default language is English
 
-        # Fix: Use an instance of GoogleTranslator to get supported languages
         temp_translator = GoogleTranslator(source='auto', target='en')
         self.supported_languages = list(temp_translator.get_supported_languages(as_dict=True).values())
 
@@ -79,7 +78,6 @@ class TranslationHandler:
         """Return list of supported languages"""
         return self.supported_languages
 
-# Create a global translator instance
 translator = TranslationHandler()
 
 def translate_to_user(text):

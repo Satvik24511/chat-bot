@@ -35,18 +35,12 @@ class SymptomMatcher:
             input_embedding = self.embedding_model.encode(normalized_input, convert_to_tensor=True)
             similarities = util.cos_sim(input_embedding, self.symptom_embeddings)
             temp = []
-            # print(similarities[0])
             flg = False
             for idx, score in enumerate(similarities[0]):
                 temp.append((score.item(),self.symptoms[idx]))
                 if score.item() > 0.70: 
                     flg = True
-                    # matched_symptoms.append(self.symptoms[idx])
-                    # print(normalized_input,self.symptoms[idx],score.item())
             if(flg):
                 temp.sort(reverse=True)
                 matched_symptoms.append(temp[0][1])
-            # for a,b in temp:
-            #     print(a,b)
-        # print(input_r,matched_symptoms)
         return matched_symptoms,"",""

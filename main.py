@@ -228,7 +228,8 @@ class Patients:
             patient_data = self.patients_collection.find_one({"_id": obj_id})
             if patient_data:
                 return Patient.from_dict(patient_data) 
-            return None        except Exception as e:
+            return None        
+        except Exception as e:
              output(f"{translator_module.translate_to_user('Error fetching record by ID')}: {e}")
              return None
 
@@ -613,11 +614,11 @@ def Gather_info(patients_db, patient):
         "Gender": patient.gender, 
         "Phone": patient.Phone,
         "Report Date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "Medical History": patient.history.get("Medical History", {}), 
+        "Medical History": patient.history.get("Medical History", {}), # Fetch potentially updated history
         "Symptoms Reported (Current Session & History)": patient.history.get("symptoms", {})
     }
 
-    markdown_report = generate_markdown_report(collected_data)
+    markdown_report = generate_markdown_report(collected_data) # For internal use/logging maybe
     pdf_filename = f"Patient_Summary_{patient.id}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
     try:
         pdf_data_english = {}
