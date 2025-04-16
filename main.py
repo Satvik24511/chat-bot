@@ -6,6 +6,7 @@ import adminhandler as ah
 import doctorhandler 
 from bson import ObjectId
 import datetime
+import translator
 
 hospital_name = "AIIMS"
 Mode = 0  # Global mode: 0 for text input, 1 for voice input
@@ -309,6 +310,9 @@ Age: {self.age}'''
 
 #login/register function that opens the program 
 def main1(patients_db):
+    translator.record_user_language()
+
+
     doctororpatient = inp("Are you a doctor or a patient? (d/p):", 0).strip().lower()
     while len(doctororpatient) < 1 or doctororpatient[0] not in ["d", "p", "doctor", "patient"]:
         doctororpatient = inp("Please input a valid response (d/p):", 0).strip().lower()
