@@ -1,27 +1,58 @@
-import whisper
-import sounddevice as sd
-import numpy as np
+import speech_recognition as sr
+import pyaudio
 import wave
+import os
+import translator
 
-def record_audio(filename: str, duration: int = 5, samplerate: int = 44100):
-    print("Recording...")
-    audio_data = sd.rec(int(samplerate * duration), samplerate=samplerate, channels=2, dtype=np.int16)
-    sd.wait()
+def record_audio(filename, duration=5, sample_rate=44100):
+    """Record audio from microphone and save to file"""
+    chunk = 1024
+    audio_format = pyaudio.paInt16
+    channels = 1
     
-    with wave.open(filename, 'wb') as wf:
-        wf.setnchannels(2)
-        wf.setsampwidth(2)
-        wf.setframerate(samplerate)
-        wf.writeframes(audio_data.tobytes())
-    print("Recording saved as", filename)
+    p = pyaudio.PyAudio()
+    
+    print(translator.translate_to_user("Recording... Please speak now."))
+    
+    stream = p.open(format=audio_format,
+                    channels=channels,
+                    rate=sample_rate,
+                    input=True,
+                    frames_per_buffer=chunk)
+    
+    frames = []
+    
+    for i in range(0, int(sample_rate / chunk * duration)):
+        data = stream.read(chunk)
+        frames.append(data)
+    
+    print(translator.translate_to_user("Recording finished."))
+    
+    stream.stop_stream()
+    stream.close()
+    p.terminate()
+    
+    wf = wave.open(filename, 'wb')
+    wf.setnchannels(channels)
+    wf.setsampwidth(p.get_sample_size(audio_format))
+    wf.setframerate(sample_rate)
+    wf.writeframes(b''.join(frames))
+    wf.close()
 
-def transcribe_audio(audio_path: str, model_size: str = "base") -> str:
-    model = whisper.load_model(model_size)
-    result = model.transcribe(audio_path)
-    return result["text"]
-
-if __name__ == "__main__":
-    filename = "user_audio.wav"
-    record_audio(filename)
-    text = transcribe_audio(filename)
-    print("Transcription:", text)
+def transcribe_audio(filename):
+    """Transcribe audio file to text using Google Speech Recognition"""
+    recognizer = sr.Recognizer()
+    
+    with sr.AudioFile(filename) as source:
+        audio_data = recognizer.record(source)
+        
+    user_lang = translator.get_user_language()
+    
+    try:
+        # Use the user's preferred language for recognition
+        text = recognizer.recognize_google(audio_data, language=user_lang)
+        return text
+    except sr.UnknownValueError:
+        return translator.translate_to_user("Sorry, I could not understand the audio.")
+    except sr.RequestError:
+        return translator.translate_to_user("Could not request results from speech recognition service.")
