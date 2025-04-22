@@ -6,3 +6,6 @@ passlib[bcrypt]
 cryptography
 sentence-transformers
 fuzzywuzzy
+logging
+datetime 
+colorama

@@ -1,4 +1,5 @@
 from preload import *
+# from logger import * # this is imported through preload
 def semantic_similarity(text1,text2,prt = False):
     if isinstance(text2, str):
         text2 = [text2]

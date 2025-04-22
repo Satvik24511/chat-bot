@@ -31,12 +31,17 @@ def decrypt_contact(token: str) -> str:
 
 def register_patient():
     print("\n=== Patient Registration ===")
-    username = input("Username: ")
+    username = input("Username: ").lower()
     if users_col.find_one({"username": username}):
         print("Username already exists.")
         return
     email = input("Email: ")
     password = getpass.getpass("Password: ")
+    password2 = getpass.getpass("Please confirm the password:")
+    while password != password2:
+        print("The passwords do not match!")
+        password = getpass.getpass("Password: ")
+        password2 = getpass.getpass("Please confirm the password:")
     name = input("Full Name: ")
     age = int(input("Age: "))
     gender = input("Gender: ")
@@ -59,6 +64,7 @@ def register_patient():
     # Create user
     users_col.insert_one({
         "username": username,
+        "Name": name,
         "email": email,
         "password": hash_password(password),
         "role": "patient"

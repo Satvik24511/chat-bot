@@ -77,6 +77,6 @@ symptom_list = [
 ]
 
 #preloading the embedding of all the known symtoms
-embedding_symptop = model.encode(symptom_list)
+embedding_symptom = model.encode(symptom_list,convert_to_tensor=True)
 
 # list of all the stuff that needs to be preloaded
