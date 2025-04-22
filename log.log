@@ -1,0 +1,5 @@
+2025-04-21 23:44:28 - root - ERROR - Gemini Failed to load
+Traceback (most recent call last):
+  File "c:\Users\Lenovo\Documents\GitHub\chat-bot\Redo_main\sentence_to_symptom.py", line 7, in create_list_for_symptoms
+    api_class = ah.eminiAPIHandler("AIzaSyBkRDmEdtVhVtHHbfvpetHKANTz1EW1qYQ")
+AttributeError: module 'api_handler' has no attribute 'eminiAPIHandler'

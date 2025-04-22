@@ -1,0 +1,28 @@
+[
+  {
+    "patient_id": "Daksh",
+    "demographic_data": {
+      "Name": "Daksh_1",
+      "Age": 18,
+      "Gender": "male",
+      "Contact": "8510047477"
+    },
+    "symptoms_data": [
+      {
+        "Symptom": "cough",
+        "Frequency": "daily",
+        "Severity": "5",
+        "Duration": "NA",
+        "Additional_Notes": "blood comess up when coughing"
+      },
+      {
+        "Symptom": "headache",
+        "Frequency": "daily",
+        "Severity": "10",
+        "Duration": "2-3 hours",
+        "Additional_Notes": "It also makes me feel nauseuos when it happens "
+      }
+    ],
+    "doctor_notes": []
+  }
+]
