@@ -1,185 +1,118 @@
-from chat_gui import ChatApp
-from imp_funcs import *
-import config
-from datetime import datetime
+import tkinter as tk
+from tkinter import ttk
 
-def run_my_logic(app):
-    while True:
-        op = app.ask_user('''Hi, This is the Medical assistant chatbot which is here to streamline the 
-medical process and save your time!
+class ChatApp(tk.Tk):
+    def __init__(self, logic=None, flow=[]):
+        super().__init__()
+        self.title("ChatBot GUI")
+        self.configure(bg="#f0f0f0")
+        self.logic = logic
+        self.flow = flow
 
-Is this your first time at the hospital? (y/n)
-''')
+        self.user_response = tk.StringVar()
+        self._build_widgets()
+        self._on_send_clicked = lambda: None
 
-        if op.lower() == "admin!":
-            pass
+    def _build_widgets(self):
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=1)
 
-        elif op.lower() in ["d", "doctor"]:
-            pass
+        self.chat_frame = ttk.Frame(self)
+        self.chat_frame.grid(row=0, column=0, sticky="nsew")
+        self.chat_frame.grid_rowconfigure(0, weight=1)
+        self.chat_frame.grid_columnconfigure(0, weight=1)
 
-        elif op.lower() in ["yes", "y", "yah"]:
-            # Begin registration
-            username = app.ask_user("Choose a username (for future logins):").lower()
-            if users_col.find_one({"username": username}):
-                app._add_bot_message("That username already exists. Please restart registration.")
-                app.reset_chat()
-                continue
+        self.chat_canvas = tk.Canvas(self.chat_frame, bg="#f0f0f0", highlightthickness=0)
+        self.scrollbar = ttk.Scrollbar(self.chat_frame, orient="vertical", command=self.chat_canvas.yview)
+        self.scrollable_frame = ttk.Frame(self.chat_canvas)
 
-            email = app.ask_user("Enter your email address:")
-            password = app.ask_password("Set a password (input will be hidden):")
-            password2 = app.ask_password("Confirm your password:")
-            while password != password2:
-                app._add_bot_message("Passwords do not match. Please try again.")
-                password = app.ask_password("Set a password:")
-                password2 = app.ask_password("Confirm your password:")
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.chat_canvas.configure(
+                scrollregion=self.chat_canvas.bbox("all")
+            )
+        )
 
-            name = app.ask_user("Full Name:")
+        self.canvas_window = self.chat_canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.chat_canvas.configure(yscrollcommand=self.scrollbar.set)
 
-            age = app.ask_user("What is your age? (give simple numbers like 15)")
-            while not age.isdigit():
-                age = app.ask_user("Please enter a valid number for age:")
-            age = int(age)
+        self.chat_canvas.grid(row=0, column=0, sticky="nsew")
+        self.scrollbar.grid(row=0, column=1, sticky="ns")
 
-            gender = "K"
-            while gender.lower() not in ['m', 'f', 'o', 'r']:
-                gender = app.ask_user('''Please input:
-M: Male
-F: Female
-O: Other
-R: Rather not say
-''').lower()
+        self.chat_canvas.bind("<Configure>", self._resize_canvas)
 
-            contact = app.ask_user("Enter your phone number:")
-            enc_contact = encrypt_contact(contact)
+        self.input_frame = ttk.Frame(self)
+        self.input_frame.grid(row=1, column=0, sticky="ew")
+        self.input_frame.columnconfigure(0, weight=1)
 
-            # Ask for medical history
-            history = app.ask_user("Do you have any previous medical history we should be aware of? Please describe briefly or type 'none'.")
+        self.user_input = ttk.Entry(self.input_frame, textvariable=self.user_response, font=("Helvetica", 14), show="")
+        self.user_input.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
+        self.user_input.bind("<Return>", lambda e: self._on_send_clicked())
 
-            # Collect symptom data
-            symptoms = []
-            added_symptoms = set()
-            add_symptom = app.ask_user("Would you like to add a symptom? (y/n)")
-            while add_symptom.lower() == "y":
-                symptom = app.ask_user("Symptom:").strip().lower()
-                if symptom in added_symptoms:
-                    app._add_bot_message("This symptom has already been added. Please enter a new one.")
-                    add_symptom = app.ask_user("Add another symptom? (y/n)")
-                    continue
+        self.send_button = ttk.Button(self.input_frame, text="Send", command=lambda: self._on_send_clicked())
+        self.send_button.grid(row=0, column=1, padx=5, pady=5)
 
-                frequency = app.ask_user("How frequently does this symptom occur? (e.g., daily, occasionally)")
-                while frequency.strip() == "":
-                    frequency = app.ask_user("Please provide a valid frequency:")
+    def _resize_canvas(self, event):
+        canvas_width = event.width
+        self.chat_canvas.itemconfig(self.canvas_window, width=canvas_width)
 
-                severity = app.ask_user("On a scale of 1 to 10, how severe is this symptom?")
-                while not severity.isdigit() or not (1 <= int(severity) <= 10):
-                    severity = app.ask_user("Please enter a number between 1 and 10 for severity:")
+    def _add_message(self, text, sender="user"):
+        bubble = ttk.Label(
+            self.scrollable_frame,
+            text=text,
+            background="#cce5ff" if sender == "user" else "#e6e6e6",
+            anchor="w" if sender == "bot" else "e",
+            justify="left",
+            wraplength=300,
+            padding=8,
+            relief="ridge"
+        )
+        bubble.pack(anchor="e" if sender == "user" else "w", pady=2, padx=10, fill="none")
 
-                duration = app.ask_user("For how long have you been experiencing this symptom? (e.g., 2 days, 1 week)")
-                while duration.strip() == "":
-                    duration = app.ask_user("Please provide a valid duration:")
+        self.after(100, lambda: self.chat_canvas.yview_moveto(1.0))
 
-                notes = app.ask_user("Any additional notes you'd like to add?")
-                date_str = datetime.now().strftime("%Y-%m-%d")
+    def _add_bot_message(self, text):
+        self._add_message(text, sender="bot")
 
-                symptoms.append({
-                    "Symptom": symptom,
-                    "Frequency": frequency,
-                    "Severity": severity,
-                    "Duration": duration,
-                    "Additional_Notes": notes,
-                    "Date": date_str
-                })
-                added_symptoms.add(symptom)
-                add_symptom = app.ask_user("Add another symptom? (y/n)")
+    def ask_user(self, question: str):
+        self._add_bot_message(question)
+        self.response_var = tk.StringVar()
 
-            # Create user and patient entries
-            users_col.insert_one({
-                "username": username,
-                "Name": name,
-                "email": email,
-                "password": hash_password(password),
-                "role": "patient"
-            })
+        def on_response(event=None):
+            user_text = self.user_input.get().strip()
+            if user_text:
+                self._add_message(user_text, sender="user")
+                self.user_input.delete(0, tk.END)
+                self.response_var.set(user_text)
 
-            patients_col.insert_one({
-                "patient_id": username,
-                "demographic_data": {
-                    "Name": name,
-                    "Age": age,
-                    "Gender": gender,
-                    "Contact": enc_contact
-                },
-                "symptoms_data": symptoms,
-                "medical_history": history,
-                "doctor_notes": []
-            })
+        self.user_input.bind("<Return>", on_response)
+        self._on_send_clicked = on_response
 
-            app._add_bot_message(f"Thank you {name}, you have been successfully registered with ID: {username}")
+        self.wait_variable(self.response_var)
+        return self.response_var.get()
 
-        elif op.lower() in ["no", "n"]:
-            app._add_bot_message("Welcome back! Let's log you in.")
-            username = app.ask_user("Enter your username:").lower()
-            password = app.ask_password("Enter your password:")
+    def reset_chat(self):
+        for widget in self.scrollable_frame.winfo_children():
+            widget.destroy()
 
-            user = users_col.find_one({"username": username})
-            if not user or not check_password(password, user["password"]):
-                app._add_bot_message("Invalid credentials. Please restart.")
-                app.reset_chat()
-                continue
+    def ask_password(self, prompt: str):
+        self._add_bot_message(prompt)
 
-            patient = patients_col.find_one({"patient_id": username})
-            today = datetime.now().strftime("%Y-%m-%d")
+        self.password_var = tk.StringVar()
 
-            old_symptoms = patient.get("symptoms_data", [])
-            to_move = [s for s in old_symptoms if s.get("Date") != today]
-            keep_today = [s for s in old_symptoms if s.get("Date") == today]
+        def on_password_submit(event=None):
+            password_text = self.user_input.get()
+            if password_text:
+                self.user_input.delete(0, tk.END)
+                self.password_var.set(password_text)
 
-            if to_move:
-                history = patient.get("medical_history", "")
-                if isinstance(history, str):
-                    history = []
-                history.extend(to_move)
-                patients_col.update_one({"patient_id": username}, {
-                    "$set": {
-                        "symptoms_data": keep_today,
-                        "medical_history": history
-                    }
-                })
+        self.user_input.configure(show="*")
+        self.user_input.bind("<Return>", on_password_submit)
+        self._on_send_clicked = on_password_submit
 
-            symptoms = keep_today[:]
-            added_symptoms = set(s["Symptom"] for s in symptoms)
-            add_symptom = app.ask_user("Would you like to report a new symptom? (y/n)")
-            while add_symptom.lower() == "y":
-                symptom = app.ask_user("Symptom:").strip().lower()
-                if symptom in added_symptoms:
-                    app._add_bot_message("This symptom has already been reported today.")
-                    add_symptom = app.ask_user("Add another symptom? (y/n)")
-                    continue
+        self.wait_variable(self.password_var)
+        password = self.password_var.get()
 
-                frequency = app.ask_user("Frequency:")
-                severity = app.ask_user("Severity (1-10):")
-                duration = app.ask_user("Duration:")
-                notes = app.ask_user("Any additional notes?")
-                date_str = today
-
-                symptoms.append({
-                    "Symptom": symptom,
-                    "Frequency": frequency,
-                    "Severity": severity,
-                    "Duration": duration,
-                    "Additional_Notes": notes,
-                    "Date": date_str
-                })
-                added_symptoms.add(symptom)
-                add_symptom = app.ask_user("Add another symptom? (y/n)")
-
-            patients_col.update_one({"patient_id": username}, {"$set": {"symptoms_data": symptoms}})
-            app._add_bot_message("Your symptoms have been updated. Thank you!")
-
-        app.reset_chat()
-
-if __name__ == "__main__":
-    app = ChatApp()
-    app.after(300, lambda: run_my_logic(app))
-    app.geometry("1366x768")
-    app.mainloop()
+        self.user_input.configure(show="")  # Reset input visibility
+        self.user_response.set("")
+        return password
